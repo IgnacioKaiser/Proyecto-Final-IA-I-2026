@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import pickle
 import os
 from sklearn.cluster import KMeans
 from sklearn.neighbors import KNeighborsClassifier
@@ -142,4 +143,31 @@ class AgenteControlAcceso:
             prediccion = self.modelo_voz.predict([caracteristicas])[0]
             return prediccion.lower()
         return None
+    def guardar_modelos(self, ruta="data/modelos_entrenados.pkl"):
+        """
+        Serializa y guarda los modelos entrenados y los centroides en un archivo binario.
+        """
+        estado = {
+            'modelo_vision': self.modelo_vision,
+            'centroides': self.centroides,
+            'modelo_voz': self.modelo_voz
+        }
+        with open(ruta, 'wb') as archivo:
+            pickle.dump(estado, archivo)
+        print(f"✅ Modelos guardados exitosamente en '{ruta}'")
+
+    def cargar_modelos(self, ruta="data/modelos_entrenados.pkl"):
+        """
+        Carga el cerebro del agente desde el disco para evitar reentrenar.
+        """
+        if not os.path.exists(ruta):
+            raise FileNotFoundError(f"No se encontró el archivo '{ruta}'. Debes entrenar los modelos primero.")
+            
+        with open(ruta, 'rb') as archivo:
+            estado = pickle.load(archivo)
+            
+        self.modelo_vision = estado['modelo_vision']
+        self.centroides = estado['centroides']
+        self.modelo_voz = estado['modelo_voz']
+        print(f"✅ Modelos cargados instantáneamente desde '{ruta}'")
 
