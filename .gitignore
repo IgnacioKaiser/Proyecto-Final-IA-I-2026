@@ -1,0 +1,21 @@
+# Datasets, audios y huellas sintéticas
+data/
+
+# Entorno virtual (muy pesado y específico de cada PC)
+venv/
+env/
+
+# Caché compilada de Python (se genera automáticamente)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos ocultos del sistema operativo (Windows/Mac)
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Archivos de configuración de editores de código (VS Code, etc.)
+.vscode/
+.idea/
