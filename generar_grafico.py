@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 from src.agente import AgenteControlAcceso
 
 def generar_grafico_clusters():
@@ -39,17 +40,22 @@ def generar_grafico_clusters():
         print("Faltan datos para graficar.")
         return
 
-    # 2. Entrenar K-Means con los datos originales (7D)
-    agente.modelo_vision.fit(X_vision)
+    # 2. Normalización Z-Score de los Momentos de Hu
+    # Esto asegura que todas las variables tengan el mismo peso matemático
+    scaler = StandardScaler()
+    X_vision_escalado = scaler.fit_transform(X_vision)
+
+    # 3. Entrenar K-Means con los datos normalizados (7D)
+    agente.modelo_vision.fit(X_vision_escalado)
     centroides_7d = agente.modelo_vision.cluster_centers_
     predicciones = agente.modelo_vision.labels_
 
-    # 3. Reducción de dimensionalidad con PCA (de 7D a 2D)
+    # 4. Reducción de dimensionalidad con PCA (de 7D a 2D)
     pca = PCA(n_components=2)
-    X_2d = pca.fit_transform(X_vision)
+    X_2d = pca.fit_transform(X_vision_escalado)
     centroides_2d = pca.transform(centroides_7d)
 
-    # 4. Configurar el gráfico con Matplotlib
+    # 5. Configurar el gráfico con Matplotlib
     plt.figure(figsize=(10, 7))
     
     # Colores para los 3 clusters
@@ -67,7 +73,7 @@ def generar_grafico_clusters():
                 c='red', marker='X', s=200, label='Centroides', 
                 edgecolors='black', linewidths=2)
 
-    # Formateo profesional para el informe
+    # Formateo profesional para el informe académico
     plt.title('Agrupamiento K-Means de Huellas Dactilares (Reducción PCA a 2D)', fontsize=14, fontweight='bold')
     plt.xlabel(f'Componente Principal 1 ({pca.explained_variance_ratio_[0]*100:.1f}% de la varianza)', fontsize=12)
     plt.ylabel(f'Componente Principal 2 ({pca.explained_variance_ratio_[1]*100:.1f}% de la varianza)', fontsize=12)
@@ -75,9 +81,9 @@ def generar_grafico_clusters():
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
 
-    # 5. Guardar la imagen
+    # 6. Guardar la imagen en alta resolución
     nombre_archivo = "grafico_kmeans_informe.png"
-    plt.savefig(nombre_archivo, dpi=300) # dpi=300 asegura alta resolución para el PDF
+    plt.savefig(nombre_archivo, dpi=300)
     print(f"✅ Gráfico generado y guardado exitosamente como '{nombre_archivo}'")
     
     # Mostrarlo en pantalla

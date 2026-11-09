@@ -73,15 +73,15 @@ def generar_variantes(ruta_base, carpeta_destino, cantidad=50):
     for i in range(cantidad):
         variante = imagen_base.copy()
         
-        # Aplicamos transformaciones aleatorias (pueden combinarse)
-        if random.random() > 0.3:  # 70% de probabilidad de rotarse
-            variante = aplicar_rotacion(variante)
-        if random.random() > 0.3:  # 70% de probabilidad de trasladarse
-            variante = aplicar_traslacion(variante)
-        if random.random() > 0.4:  # 60% de probabilidad de tener ruido
-            variante = aplicar_ruido(variante)
-        if random.random() > 0.8:  # 20% de probabilidad de sufrir un corte
-            variante = aplicar_corte_parcial(variante)
+        # Mantenemos alta la probabilidad de rotación y traslación (Hu las soporta)
+        if random.random() > 0.1:  
+            variante = aplicar_rotacion(variante, angulo_maximo=25)
+        if random.random() > 0.1:  
+            variante = aplicar_traslacion(variante, desplazamiento_maximo=20)
+            
+        # Reducimos drásticamente el ruido para no romper el esqueleto
+        if random.random() > 0.7:  
+            variante = aplicar_ruido(variante, probabilidad=0.005)
             
         ruta_salida = os.path.join(carpeta_destino, f"{nombre_base}_var_{i+1}.png")
         cv2.imwrite(ruta_salida, variante)

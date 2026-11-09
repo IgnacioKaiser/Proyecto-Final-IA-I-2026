@@ -32,7 +32,7 @@ def main():
     print("=== INICIANDO MODO PRUEBA: SOLO VISIÓN ===")
     
     # 1. Instanciar agente y cargar el "cerebro" pre-entrenado
-    agente = AgenteControlAcceso(umbral_aceptacion=2.5) 
+    agente = AgenteControlAcceso(umbral_aceptacion=1.6) 
     agente.cargar_modelos(DIRECTORIO_PROYECTO / "data/modelos_entrenados.pkl")
 
     # 2. Inicializar el motor gráfico

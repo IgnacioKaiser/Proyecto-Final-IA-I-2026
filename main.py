@@ -33,7 +33,7 @@ def main():
     
     # 1. Instanciar y entrenar al Agente de IA
     # El umbral puede requerir ajuste dependiendo de los valores matemáticos de los Momentos de Hu.
-    agente = AgenteControlAcceso(umbral_aceptacion=2.5) 
+    agente = AgenteControlAcceso(umbral_aceptacion=1.5) 
     agente.entrenar_kmeans()
     agente.entrenar_knn()
 
