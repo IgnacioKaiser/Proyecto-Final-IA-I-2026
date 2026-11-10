@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import os
 import random
+import re
+from pathlib import Path
 
 def aplicar_rotacion(imagen, angulo_maximo=15):
     """Aplica una rotación aleatoria entre -angulo_maximo y +angulo_maximo grados."""
@@ -68,66 +70,133 @@ def aplicar_corte_parcial(imagen, proporcion_corte=0.2):
         
     return imagen_cortada
 
-def generar_variantes(ruta_base, carpeta_destino, cantidad=50):
+def generar_variantes(ruta_base, carpeta_destino, cantidad=5, semilla=42):
     """
     Toma una imagen base y genera 'cantidad' de variantes aplicando
     transformaciones sintéticas aleatorias para simular casos reales[cite: 3].
     """
     os.makedirs(carpeta_destino, exist_ok=True)
-    imagen_base = cv2.imread(ruta_base, cv2.IMREAD_GRAYSCALE)
-    
-    if imagen_base is None:
-        print(f"Error: No se encontró la imagen base en {ruta_base}")
-        return
+    imagen_base = cv2.imread(str(ruta_base), cv2.IMREAD_GRAYSCALE)
 
-    nombre_base = os.path.basename(ruta_base).split('.')[0]
+    if imagen_base is None:
+        raise FileNotFoundError(f"No se encontró la imagen base en {ruta_base}")
+
+    nombre_base = Path(ruta_base).stem
+    generadas = 0
 
     for i in range(cantidad):
-        variante = imagen_base.copy()
-        
-        # Mantenemos alta la probabilidad de rotación y traslación (Hu las soporta)
-        if random.random() > 0.1:  
-            variante = aplicar_rotacion(variante, angulo_maximo=25)
-        if random.random() > 0.1:  
-            variante = aplicar_traslacion(variante, desplazamiento_maximo=20)
-            
-        if random.random() > 0.4:
-            perturbacion = random.choice(("sal_pimienta", "gaussiano", "presion", "corte"))
-            if perturbacion == "sal_pimienta":
-                variante = aplicar_ruido(variante, probabilidad=0.005)
-            elif perturbacion == "gaussiano":
-                variante = aplicar_ruido_gaussiano(variante)
-            elif perturbacion == "presion":
-                variante = variar_presion(variante)
-            else:
-                variante = aplicar_corte_parcial(variante)
-            
         ruta_salida = os.path.join(carpeta_destino, f"{nombre_base}_var_{i+1}.png")
+        if os.path.isfile(ruta_salida):
+            continue
+
+        semilla_variante = semilla + i
+        rng = random.Random(semilla_variante)
+        rng_numpy = np.random.default_rng(semilla_variante)
+        variante = imagen_base.copy()
+
+        if rng.random() > 0.2:
+            angulo = rng.uniform(-12, 12)
+            alto, ancho = variante.shape
+            matriz_rotacion = cv2.getRotationMatrix2D((ancho / 2, alto / 2), angulo, 1)
+            variante = cv2.warpAffine(
+                variante,
+                matriz_rotacion,
+                (ancho, alto),
+                borderValue=255,
+            )
+        if rng.random() > 0.2:
+            alto, ancho = variante.shape
+            tx = rng.randint(-max(1, ancho // 30), max(1, ancho // 30))
+            ty = rng.randint(-max(1, alto // 30), max(1, alto // 30))
+            matriz_traslacion = np.float32([[1, 0, tx], [0, 1, ty]])
+            variante = cv2.warpAffine(
+                variante,
+                matriz_traslacion,
+                (ancho, alto),
+                borderValue=255,
+            )
+
+        perturbacion = rng.choice(("sal_pimienta", "gaussiano", "presion", "corte"))
+        if perturbacion == "sal_pimienta":
+            alto, ancho = variante.shape
+            cantidad_pixeles = int(0.001 * alto * ancho)
+            ys = rng_numpy.integers(0, alto, cantidad_pixeles)
+            xs = rng_numpy.integers(0, ancho, cantidad_pixeles)
+            valores = rng_numpy.choice((0, 255), cantidad_pixeles)
+            variante[ys, xs] = valores
+        elif perturbacion == "gaussiano":
+            ruido = rng_numpy.normal(0, 5, variante.shape)
+            variante = np.clip(variante.astype(np.float32) + ruido, 0, 255).astype(np.uint8)
+        elif perturbacion == "presion":
+            operacion = rng.choice((cv2.MORPH_ERODE, cv2.MORPH_DILATE))
+            variante = cv2.morphologyEx(
+                variante,
+                operacion,
+                np.ones((2, 2), dtype=np.uint8),
+            )
+        else:
+            alto, ancho = variante.shape
+            proporcion = 0.1
+            borde = rng.randrange(4)
+            if borde == 0:
+                variante[:int(alto * proporcion), :] = 255
+            elif borde == 1:
+                variante[int(alto * (1 - proporcion)):, :] = 255
+            elif borde == 2:
+                variante[:, :int(ancho * proporcion)] = 255
+            else:
+                variante[:, int(ancho * (1 - proporcion)):] = 255
+
         if not cv2.imwrite(ruta_salida, variante):
             raise OSError(f"No se pudo guardar la variante en '{ruta_salida}'.")
-        
-    print(f"Se generaron {cantidad} variantes en '{carpeta_destino}' a partir de {nombre_base}.")
+        generadas += 1
+
+    return generadas
+
+
+def generar_variantes_impresiones(
+    directorio_autorizadas="data/huellas/autorizadas",
+    cantidad_por_imagen=5,
+):
+    """Genera variantes sin modificar originales y las guarda por impresión de origen."""
+    directorio_autorizadas = Path(directorio_autorizadas)
+    if not directorio_autorizadas.is_dir():
+        raise FileNotFoundError(
+            f"No se encontró el directorio de impresiones '{directorio_autorizadas}'."
+        )
+
+    carpetas = sorted(
+        (
+            ruta
+            for ruta in directorio_autorizadas.iterdir()
+            if ruta.is_dir() and re.fullmatch(r"Impression_\d+", ruta.name)
+        ),
+        key=lambda ruta: int(ruta.name.split("_")[-1]),
+    )
+    if not carpetas:
+        return 0
+
+    directorio_variantes = directorio_autorizadas.parent / "variantes"
+    generadas = 0
+    for carpeta in carpetas:
+        for identidad in range(1, 7):
+            ruta_origen = carpeta / f"{identidad}.png"
+            if not ruta_origen.is_file():
+                raise FileNotFoundError(
+                    f"Falta '{ruta_origen}'. Cada impresión debe contener 1.png a 6.png."
+                )
+            generadas += generar_variantes(
+                ruta_origen,
+                directorio_variantes / carpeta.name,
+                cantidad=cantidad_por_imagen,
+                semilla=int(carpeta.name.split("_")[-1]) * 1000 + identidad * 100,
+            )
+
+    print(
+        f"Se generaron {generadas} variantes en '{directorio_variantes}'. "
+        "Las capturas originales quedaron intactas."
+    )
+    return generadas
 
 if __name__ == "__main__":
-    random.seed(42)
-    np.random.seed(42)
-    print("=== GENERADOR DE IDENTIDADES SINTÉTICAS ===")
-    
-    # 1. Generar lote de identidades AUTORIZADAS (Entrenamiento K-Means)
-    # Suponiendo que tienes tus 3 huellas base guardadas aquí:
-    generar_variantes("data/huellas/base/autorizada_1.png", "data/huellas/autorizadas/id_1", cantidad=30)
-    generar_variantes("data/huellas/base/autorizada_2.png", "data/huellas/autorizadas/id_2", cantidad=30)
-    generar_variantes("data/huellas/base/autorizada_3.png", "data/huellas/autorizadas/id_3", cantidad=30)
-    
-    # 2. Generar lote de INTRUSOS (Identidades desconocidas)
-    # Tomas huellas base que no pertenecen a las 3 autorizadas
-    generar_variantes("data/huellas/base/intrusa_1.png", "data/huellas/intrusos/id_desconocida_1", cantidad=20)
-    generar_variantes("data/huellas/base/intrusa_2.png", "data/huellas/intrusos/id_desconocida_2", cantidad=20)
-
-    # 3. Generar muestras de PRUEBA (Validación final)
-    for identidad in range(1, 4):
-        generar_variantes(
-            f"data/huellas/base/autorizada_{identidad}.png",
-            "data/huellas/prueba/autorizadas",
-            cantidad=10,
-        )
+    generar_variantes_impresiones()

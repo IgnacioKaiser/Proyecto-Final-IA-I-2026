@@ -16,6 +16,7 @@ from collections import Counter
 
 from src.procesamiento_voz import cargar_dataset_voz, escuchar_audio_en_vivo
 from src.procesamiento_imagen import procesar_pipeline_completo
+from src.generador_sintetico import generar_variantes_impresiones
 
 
 def obtener_particiones_impresiones(directorio_autorizadas="data/huellas/autorizadas"):
@@ -47,10 +48,16 @@ def obtener_particiones_impresiones(directorio_autorizadas="data/huellas/autoriz
                 f"Faltan las imágenes {', '.join(faltantes)} en '{carpeta}'. "
                 "Cada impresión debe contener 1.png a 6.png."
             )
-        muestras_por_carpeta[numero] = [
-            (archivos[str(identidad)], identidad)
-            for identidad in range(1, 7)
-        ]
+        muestras = []
+        directorio_variantes = directorio.parent / "variantes" / carpeta.name
+        for identidad in range(1, 7):
+            muestras.append((archivos[str(identidad)], identidad))
+            variantes = sorted(
+                directorio_variantes.glob(f"{identidad}_var_*.png"),
+                key=lambda ruta: int(ruta.stem.rsplit("_", 1)[-1]),
+            )
+            muestras.extend((ruta, identidad) for ruta in variantes)
+        muestras_por_carpeta[numero] = muestras
 
     orden = np.random.default_rng(42).permutation(len(carpetas))
     cantidad_entrenamiento = max(1, int(len(carpetas) * 0.6))
@@ -162,6 +169,8 @@ class AgenteControlAcceso:
             print(f"Advertencia: No se encontró '{directorio_autorizadas}'.")
             return
 
+        if obtener_particiones_impresiones(directorio_autorizadas):
+            generar_variantes_impresiones(directorio_autorizadas)
         particiones = obtener_particiones_impresiones(directorio_autorizadas)
         if particiones:
             muestras_entrenamiento = [
