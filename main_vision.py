@@ -1,7 +1,8 @@
 import pygame
+import random
 import sys
 from pathlib import Path
-from src.agente import AgenteControlAcceso
+from src.agente import AgenteControlAcceso, obtener_particiones_impresiones
 
 DIRECTORIO_PROYECTO = Path(__file__).resolve().parent
 
@@ -14,26 +15,42 @@ COLOR_EXITO = (0, 180, 50)              # Verde
 COLOR_ERROR = (200, 0, 0)               # Rojo
 COLOR_TEXTO = (240, 240, 240)           # Blanco suave
 
-def obtener_ruta_prueba(tecla):
+def obtener_ruta_prueba(tecla, muestras_por_identidad):
     """
-    Devuelve la ruta de una huella de prueba dependiendo de la tecla presionada.
+    Selecciona una captura de prueba de la identidad indicada por la tecla.
     """
-    if tecla == pygame.K_1:
-        return DIRECTORIO_PROYECTO / "data/huellas/prueba/autorizadas/autorizada_1_var_1.png"
-    elif tecla == pygame.K_2:
-        return DIRECTORIO_PROYECTO / "data/huellas/prueba/autorizadas/autorizada_2_var_1.png"
-    elif tecla == pygame.K_3:
-        return DIRECTORIO_PROYECTO / "data/huellas/autorizadas/id_3/autorizada_3_var_1.png"
-    elif tecla == pygame.K_4:
-        return DIRECTORIO_PROYECTO / "data/huellas/intrusos/id_desconocida_1/intrusa_1_var_1.png"
+    teclas = {
+        pygame.K_1: 1,
+        pygame.K_2: 2,
+        pygame.K_3: 3,
+        pygame.K_4: 4,
+        pygame.K_5: 5,
+        pygame.K_6: 6,
+    }
+    identidad = teclas.get(tecla)
+    muestras = muestras_por_identidad.get(identidad, [])
+    if muestras:
+        return random.choice(muestras)
+    if identidad in {1, 2, 3}:
+        return DIRECTORIO_PROYECTO / "data" / "huellas" / "prueba" / "autorizadas" / f"autorizada_{identidad}_var_1.png"
+    if identidad == 4:
+        return DIRECTORIO_PROYECTO / "data" / "huellas" / "intrusos" / "id_desconocida_1" / "intrusa_1_var_1.png"
     return None
 
 def main():
     print("=== INICIANDO MODO PRUEBA: SOLO VISIÓN ===")
     
     # 1. Instanciar agente y cargar el "cerebro" pre-entrenado
-    agente = AgenteControlAcceso(umbral_aceptacion=1.6) 
+    agente = AgenteControlAcceso()
     agente.cargar_modelos(DIRECTORIO_PROYECTO / "data/modelos_entrenados.pkl")
+    print(f"Calibración del umbral: {agente.calibrar_umbral()}")
+    particiones = obtener_particiones_impresiones(
+        DIRECTORIO_PROYECTO / "data" / "huellas" / "autorizadas"
+    )
+    muestras_por_identidad = {}
+    if particiones:
+        for ruta, identidad in particiones["prueba"]:
+            muestras_por_identidad.setdefault(identidad, []).append(ruta)
 
     # 2. Inicializar el motor gráfico
     pygame.init()
@@ -47,7 +64,7 @@ def main():
     estado = "ESPERANDO_HUELLA"
     color_actual = COLOR_FONDO_NORMAL
     texto_principal = "ESPERANDO HUELLA DACTILAR"
-    texto_secundario = "Presione 1, 2, 3 (Autorizado) o 4 (Intruso)"
+    texto_secundario = "Presione 1-3 (Autorizado) o 4-6 (Intruso)"
     
     reloj = pygame.time.Clock()
 
@@ -61,7 +78,7 @@ def main():
             if evento.type == pygame.KEYDOWN:
                 # --- ESTADO 1: EVALUAR HUELLA ---
                 if estado == "ESPERANDO_HUELLA":
-                    ruta_huella = obtener_ruta_prueba(evento.key)
+                    ruta_huella = obtener_ruta_prueba(evento.key, muestras_por_identidad)
                     
                     if ruta_huella:
                         if not ruta_huella.is_file():

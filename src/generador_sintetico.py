@@ -37,6 +37,18 @@ def aplicar_ruido(imagen, probabilidad=0.02):
         
     return imagen_ruidosa
 
+def aplicar_ruido_gaussiano(imagen, desviacion=8):
+    """Añade ruido gaussiano de baja intensidad."""
+    ruido = np.random.normal(0, desviacion, imagen.shape)
+    imagen_ruidosa = imagen.astype(np.float32) + ruido
+    return np.clip(imagen_ruidosa, 0, 255).astype(np.uint8)
+
+def variar_presion(imagen):
+    """Simula cambios de grosor de crestas mediante morfología."""
+    operacion = random.choice((cv2.MORPH_ERODE, cv2.MORPH_DILATE))
+    kernel = np.ones((2, 2), dtype=np.uint8)
+    return cv2.morphologyEx(imagen, operacion, kernel)
+
 def aplicar_corte_parcial(imagen, proporcion_corte=0.2):
     """Simula un corte parcial de la huella tapando un borde con blanco[cite: 3]."""
     imagen_cortada = imagen.copy()
@@ -79,16 +91,26 @@ def generar_variantes(ruta_base, carpeta_destino, cantidad=50):
         if random.random() > 0.1:  
             variante = aplicar_traslacion(variante, desplazamiento_maximo=20)
             
-        # Reducimos drásticamente el ruido para no romper el esqueleto
-        if random.random() > 0.7:  
-            variante = aplicar_ruido(variante, probabilidad=0.005)
+        if random.random() > 0.4:
+            perturbacion = random.choice(("sal_pimienta", "gaussiano", "presion", "corte"))
+            if perturbacion == "sal_pimienta":
+                variante = aplicar_ruido(variante, probabilidad=0.005)
+            elif perturbacion == "gaussiano":
+                variante = aplicar_ruido_gaussiano(variante)
+            elif perturbacion == "presion":
+                variante = variar_presion(variante)
+            else:
+                variante = aplicar_corte_parcial(variante)
             
         ruta_salida = os.path.join(carpeta_destino, f"{nombre_base}_var_{i+1}.png")
-        cv2.imwrite(ruta_salida, variante)
+        if not cv2.imwrite(ruta_salida, variante):
+            raise OSError(f"No se pudo guardar la variante en '{ruta_salida}'.")
         
-    print(f"✅ Se generaron {cantidad} variantes en '{carpeta_destino}' a partir de {nombre_base}.")
+    print(f"Se generaron {cantidad} variantes en '{carpeta_destino}' a partir de {nombre_base}.")
 
 if __name__ == "__main__":
+    random.seed(42)
+    np.random.seed(42)
     print("=== GENERADOR DE IDENTIDADES SINTÉTICAS ===")
     
     # 1. Generar lote de identidades AUTORIZADAS (Entrenamiento K-Means)
@@ -103,6 +125,9 @@ if __name__ == "__main__":
     generar_variantes("data/huellas/base/intrusa_2.png", "data/huellas/intrusos/id_desconocida_2", cantidad=20)
 
     # 3. Generar muestras de PRUEBA (Validación final)
-    # Se genera un lote extra de las autorizadas para la demostración en vivo
-    generar_variantes("data/huellas/base/autorizada_1.png", "data/huellas/prueba/autorizadas", cantidad=10)
-    generar_variantes("data/huellas/base/autorizada_2.png", "data/huellas/prueba/autorizadas", cantidad=10)
+    for identidad in range(1, 4):
+        generar_variantes(
+            f"data/huellas/base/autorizada_{identidad}.png",
+            "data/huellas/prueba/autorizadas",
+            cantidad=10,
+        )

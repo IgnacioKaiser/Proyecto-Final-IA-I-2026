@@ -2,12 +2,10 @@ import sounddevice as sd
 from scipy.io.wavfile import write
 import os
 import time
+from src.procesamiento_voz import DURACION_SEGUNDOS, FRECUENCIA_MUESTREO
 
-# Configuración
-FRECUENCIA_MUESTREO = 44100
-DURACION_SEGUNDOS = 3
 COMANDOS = ["reconocer", "identificar", "salir"]
-MUESTRAS_POR_COMANDO = 15 # Cantidad de muestras nuevas que agregarás cada vez que corras el script
+MUESTRAS_POR_COMANDO = 30 # Cantidad de muestras nuevas que agregarás cada vez que corras el script
 
 def grabar_comandos():
     print("=== RECOLECTOR DE VOCES PARA K-NN ===")

@@ -4,12 +4,13 @@ from src.agente import AgenteControlAcceso
 def ejecutar_entrenamiento():
     print("=== INICIANDO FASE DE ENTRENAMIENTO (OFFLINE) ===")
     
-    # 1. Instanciar el agente (puedes ajustar el umbral aquí si lo deseas)
-    agente = AgenteControlAcceso(umbral_aceptacion=2.5)
+    agente = AgenteControlAcceso()
     
     # 2. Procesar los datasets pesados
     agente.entrenar_kmeans()
     agente.entrenar_knn()
+    metricas = agente.calibrar_umbral()
+    print(f"\nResultados de validación: {metricas}")
     
     # 3. Guardar el estado en disco
     agente.guardar_modelos()

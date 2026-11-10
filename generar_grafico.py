@@ -3,36 +3,34 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from src.agente import AgenteControlAcceso
+from src.agente import AgenteControlAcceso, obtener_particiones_impresiones
 
 def generar_grafico_clusters():
     print("Extrayendo características para el gráfico...")
     agente = AgenteControlAcceso()
     
-    directorio_autorizadas = "data/huellas/autorizadas"
     X_vision = []
-    etiquetas_reales = []
-    nombres_clases = []
+    particiones = obtener_particiones_impresiones()
 
-    # 1. Recolectar datos usando los métodos del agente
-    if not os.path.exists(directorio_autorizadas):
-        print("Error: No se encontró la carpeta de huellas autorizadas.")
-        return
+    # 1. Usar las mismas impresiones autorizadas de entrenamiento que el agente.
+    if particiones:
+        rutas = [ruta for ruta, _ in particiones["entrenamiento"]]
+    else:
+        directorio_autorizadas = "data/huellas/autorizadas"
+        if not os.path.exists(directorio_autorizadas):
+            raise FileNotFoundError("No se encontró la carpeta de huellas autorizadas.")
+        rutas = [
+            os.path.join(directorio_autorizadas, carpeta_id, archivo)
+            for carpeta_id in os.listdir(directorio_autorizadas)
+            for archivo in os.listdir(os.path.join(directorio_autorizadas, carpeta_id))
+            if os.path.isfile(os.path.join(directorio_autorizadas, carpeta_id, archivo))
+            and archivo.lower().endswith((".png", ".jpg", ".jpeg"))
+        ]
 
-    for idx, carpeta_id in enumerate(os.listdir(directorio_autorizadas)):
-        ruta_id = os.path.join(directorio_autorizadas, carpeta_id)
-        if os.path.isdir(ruta_id):
-            nombres_clases.append(carpeta_id)
-            for archivo in os.listdir(ruta_id):
-                if archivo.endswith(('.png', '.jpg')):
-                    ruta_imagen = os.path.join(ruta_id, archivo)
-                    try:
-                        esqueleto = agente.preprocesar_huella(ruta_imagen)
-                        caracteristicas = agente.extraer_caracteristicas_huella(esqueleto)
-                        X_vision.append(caracteristicas)
-                        etiquetas_reales.append(idx)
-                    except Exception as e:
-                        pass
+    for ruta_imagen in rutas:
+        esqueleto = agente.preprocesar_huella(str(ruta_imagen))
+        caracteristicas = agente.extraer_caracteristicas_huella(esqueleto)
+        X_vision.append(caracteristicas)
 
     X_vision = np.array(X_vision)
     
@@ -40,17 +38,16 @@ def generar_grafico_clusters():
         print("Faltan datos para graficar.")
         return
 
-    # 2. Normalización Z-Score de los Momentos de Hu
-    # Esto asegura que todas las variables tengan el mismo peso matemático
+    # 2. Normalización Z-Score de los descriptores HOG.
     scaler = StandardScaler()
     X_vision_escalado = scaler.fit_transform(X_vision)
 
-    # 3. Entrenar K-Means con los datos normalizados (7D)
+    # 3. Entrenar K-Means con los datos normalizados.
     agente.modelo_vision.fit(X_vision_escalado)
     centroides_7d = agente.modelo_vision.cluster_centers_
     predicciones = agente.modelo_vision.labels_
 
-    # 4. Reducción de dimensionalidad con PCA (de 7D a 2D)
+    # 4. Reducción de dimensionalidad con PCA para visualizar los clusters.
     pca = PCA(n_components=2)
     X_2d = pca.fit_transform(X_vision_escalado)
     centroides_2d = pca.transform(centroides_7d)

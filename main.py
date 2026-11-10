@@ -1,134 +1,212 @@
-import pygame
+import random
 import sys
-import os
-from src.agente import AgenteControlAcceso
+from pathlib import Path
 
-# ==========================================
-# CONFIGURACIÓN DE INTERFAZ (PYGAME)
-# ==========================================
+import pygame
+
+from src.agente import AgenteControlAcceso, obtener_particiones_impresiones
+
+
+DIRECTORIO_PROYECTO = Path(__file__).resolve().parent
+DIRECTORIO_PRUEBA = DIRECTORIO_PROYECTO / "data" / "huellas" / "prueba"
+DIRECTORIO_INTRUSOS = DIRECTORIO_PROYECTO / "data" / "huellas" / "intrusos"
+
 ANCHO, ALTO = 800, 600
-COLOR_FONDO_NORMAL = (30, 30, 30)       # Gris oscuro (Dark mode)
-COLOR_FONDO_ESCUCHA = (0, 100, 200)     # Azul
-COLOR_EXITO = (0, 180, 50)              # Verde
-COLOR_ERROR = (200, 0, 0)               # Rojo
-COLOR_TEXTO = (240, 240, 240)           # Blanco suave
+COLOR_FONDO = (30, 30, 30)
+COLOR_TEXTO = (240, 240, 240)
+COLOR_BOTON = (45, 105, 170)
+COLOR_BOTON_HOVER = (65, 130, 200)
+COLOR_EXITO = (0, 180, 50)
+COLOR_ERROR = (220, 55, 55)
 
-def obtener_ruta_prueba(tecla):
-    """
-    Simula el escáner físico. Devuelve la ruta de una huella de prueba
-    dependiendo del número presionado en el teclado.
-    """
-    if tecla == pygame.K_1:
-        return "data/huellas/prueba/autorizadas/autorizada_1_var_1.png"
-    elif tecla == pygame.K_2:
-        return "data/huellas/prueba/autorizadas/autorizada_2_var_1.png"
-    elif tecla == pygame.K_3:
-        return "data/huellas/prueba/autorizadas/autorizada_3_var_1.png"
-    elif tecla == pygame.K_4:
-        return "data/huellas/intrusos/id_desconocida_1/intrusa_1_var_1.png"
-    return None
+BOTON_ESCUCHAR = pygame.Rect(65, 510, 310, 58)
+BOTON_OTRA_HUELLA = pygame.Rect(425, 510, 310, 58)
+
+
+def obtener_muestras_prueba():
+    """Reúne las huellas autorizadas de prueba y las muestras de intrusos."""
+    particiones = obtener_particiones_impresiones(
+        DIRECTORIO_PROYECTO / "data" / "huellas" / "autorizadas"
+    )
+    if particiones:
+        return sorted({ruta for ruta, _ in particiones["prueba"]})
+
+    muestras = []
+    for directorio in (DIRECTORIO_PRUEBA, DIRECTORIO_INTRUSOS):
+        if directorio.is_dir():
+            muestras.extend(
+                ruta
+                for ruta in directorio.rglob("*")
+                if ruta.is_file() and ruta.suffix.lower() in {".png", ".jpg", ".jpeg"}
+            )
+
+    muestras.sort()
+    if not muestras:
+        raise FileNotFoundError(
+            "No se encontraron huellas de prueba en data/huellas/prueba ni data/huellas/intrusos."
+        )
+    return muestras
+
+
+def elegir_otra_muestra(muestras, muestra_actual=None):
+    """Elige una huella al azar y evita repetir la actual cuando sea posible."""
+    opciones = [muestra for muestra in muestras if muestra != muestra_actual]
+    return random.choice(opciones or muestras)
+
+
+def dibujar_boton(pantalla, fuente, rectangulo, etiqueta, posicion_mouse):
+    color = COLOR_BOTON_HOVER if rectangulo.collidepoint(posicion_mouse) else COLOR_BOTON
+    pygame.draw.rect(pantalla, color, rectangulo, border_radius=8)
+    texto = fuente.render(etiqueta, True, COLOR_TEXTO)
+    pantalla.blit(
+        texto,
+        (rectangulo.centerx - texto.get_width() // 2, rectangulo.centery - texto.get_height() // 2),
+    )
+
+
+def dibujar_interfaz(pantalla, fuentes, ruta_muestra, imagen_muestra, mensaje, color_mensaje):
+    fuente_titulo, fuente_texto, fuente_boton = fuentes
+    pantalla.fill(COLOR_FONDO)
+
+    titulo = fuente_titulo.render("CONTROL DE ACCESO", True, COLOR_TEXTO)
+    pantalla.blit(titulo, (ANCHO // 2 - titulo.get_width() // 2, 28))
+
+    pygame.draw.rect(pantalla, (55, 55, 55), (280, 100, 240, 250), border_radius=8)
+    pantalla.blit(
+        imagen_muestra,
+        (
+            ANCHO // 2 - imagen_muestra.get_width() // 2,
+            225 - imagen_muestra.get_height() // 2,
+        ),
+    )
+
+    try:
+        nombre_muestra = str(
+            ruta_muestra.relative_to(
+                DIRECTORIO_PROYECTO / "data" / "huellas" / "autorizadas"
+            )
+        )
+    except ValueError:
+        nombre_muestra = ruta_muestra.name
+    etiqueta_muestra = fuente_texto.render(nombre_muestra, True, COLOR_TEXTO)
+    pantalla.blit(
+        etiqueta_muestra,
+        (ANCHO // 2 - etiqueta_muestra.get_width() // 2, 365),
+    )
+
+    texto_estado = fuente_texto.render(mensaje, True, color_mensaje)
+    pantalla.blit(texto_estado, (ANCHO // 2 - texto_estado.get_width() // 2, 430))
+
+    posicion_mouse = pygame.mouse.get_pos()
+    dibujar_boton(
+        pantalla,
+        fuente_boton,
+        BOTON_ESCUCHAR,
+        "ESCUCHAR COMANDO",
+        posicion_mouse,
+    )
+    dibujar_boton(
+        pantalla,
+        fuente_boton,
+        BOTON_OTRA_HUELLA,
+        "OTRA HUELLA ALEATORIA",
+        posicion_mouse,
+    )
+    pygame.display.flip()
+
+
+def cargar_imagen_muestra(ruta_muestra):
+    imagen = pygame.image.load(str(ruta_muestra)).convert()
+    ancho, alto = imagen.get_size()
+    escala = min(220 / ancho, 230 / alto)
+    nuevo_tamano = (max(1, int(ancho * escala)), max(1, int(alto * escala)))
+    return pygame.transform.smoothscale(imagen, nuevo_tamano)
+
 
 def main():
     print("=== INICIANDO SISTEMA MULTIMODAL ===")
-    
-    # 1. Instanciar y entrenar al Agente de IA
-    # El umbral puede requerir ajuste dependiendo de los valores matemáticos de los Momentos de Hu.
-    agente = AgenteControlAcceso(umbral_aceptacion=1.5) 
+    agente = AgenteControlAcceso()
     agente.entrenar_kmeans()
     agente.entrenar_knn()
+    print(f"Calibración del umbral: {agente.calibrar_umbral()}")
 
-    # 2. Inicializar el motor gráfico
+    muestras = obtener_muestras_prueba()
+    ruta_muestra = elegir_otra_muestra(muestras)
+
     pygame.init()
     pantalla = pygame.display.set_mode((ANCHO, ALTO))
     pygame.display.set_caption("Agente de Control de Acceso Multimodal")
-    
-    # Cargar fuentes (usamos fuentes genéricas del sistema)
-    fuente_titulo = pygame.font.SysFont("consolas", 36, bold=True)
-    fuente_texto = pygame.font.SysFont("consolas", 20)
+    fuentes = (
+        pygame.font.SysFont("consolas", 34, bold=True),
+        pygame.font.SysFont("consolas", 19),
+        pygame.font.SysFont("consolas", 20, bold=True),
+    )
 
-    # 3. Máquina de estados de la interfaz
-    estado = "ESPERANDO_VOZ"
-    color_actual = COLOR_FONDO_NORMAL
-    texto_principal = "SISTEMA BLOQUEADO"
-    texto_secundario = "Presione [ESPACIO] para activar el micrófono"
-    
+    imagen_muestra = cargar_imagen_muestra(ruta_muestra)
+    mensaje = "Huella seleccionada. Presione un botón."
+    color_mensaje = COLOR_TEXTO
     reloj = pygame.time.Clock()
 
-    # 4. Bucle principal de eventos
-    while True:
+    ejecutando = True
+    while ejecutando:
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-                
-            if evento.type == pygame.KEYDOWN:
-                # --- ESTADO 1: INICIAR ESCUCHA ---
-                if estado == "ESPERANDO_VOZ" and evento.key == pygame.K_SPACE:
-                    estado = "ESCUCHANDO"
-                    color_actual = COLOR_FONDO_ESCUCHA
-                    texto_principal = "ESCUCHANDO..."
-                    texto_secundario = "Diga: 'reconocer', 'identificar' o 'salir'"
-                    
-                # --- ESTADO 2: SELECCIONAR HUELLA ---
-                elif estado == "ESPERANDO_HUELLA":
-                    ruta_huella = obtener_ruta_prueba(evento.key)
-                    
-                    if ruta_huella:
-                        if not os.path.exists(ruta_huella):
-                            texto_principal = "ERROR: ARCHIVO NO ENCONTRADO"
-                            texto_secundario = f"No existe {ruta_huella}. ¿Ejecutó generador_sintetico.py?"
-                            color_actual = COLOR_ERROR
+                ejecutando = False
+            elif evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+                ejecutando = False
+            elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                if BOTON_OTRA_HUELLA.collidepoint(evento.pos):
+                    ruta_muestra = elegir_otra_muestra(muestras, ruta_muestra)
+                    imagen_muestra = cargar_imagen_muestra(ruta_muestra)
+                    mensaje = "Nueva huella seleccionada."
+                    color_mensaje = COLOR_TEXTO
+                elif BOTON_ESCUCHAR.collidepoint(evento.pos):
+                    mensaje = "Escuchando: diga reconocer, identificar o salir..."
+                    color_mensaje = COLOR_TEXTO
+                    dibujar_interfaz(
+                        pantalla,
+                        fuentes,
+                        ruta_muestra,
+                        imagen_muestra,
+                        mensaje,
+                        color_mensaje,
+                    )
+
+                    comando = agente.escuchar_comando()
+                    print(f"Comando detectado: {comando if comando is not None else 'ninguno'}")
+                    if comando == "salir":
+                        ejecutando = False
+                    elif comando in {"reconocer", "identificar"}:
+                        acceso, identidad = agente.evaluar_acceso(str(ruta_muestra))
+                        if acceso and comando == "identificar":
+                            mensaje = f"IDENTIDAD RECONOCIDA: {identidad}"
+                            color_mensaje = COLOR_EXITO
+                        elif acceso:
+                            mensaje = "HUELLA AUTORIZADA"
+                            color_mensaje = COLOR_EXITO
                         else:
-                            # Petición matemática de validación al agente
-                            acceso, identidad = agente.evaluar_acceso(ruta_huella)
-                            estado = "RESULTADO"
-                            if acceso:
-                                texto_principal = f"ACCESO CONCEDIDO: {identidad}"
-                                color_actual = COLOR_EXITO
-                            else:
-                                texto_principal = "ACCESO DENEGADO (Intruso)"
-                                color_actual = COLOR_ERROR
-                            texto_secundario = "Presione [ENTER] para reiniciar"
+                            mensaje = "HUELLA NO AUTORIZADA"
+                            color_mensaje = COLOR_ERROR
+                    elif comando is None:
+                        mensaje = "No se detecto ningun comando. Intente nuevamente."
+                        color_mensaje = COLOR_ERROR
                     else:
-                        texto_secundario = "Presione 1, 2, 3 (Autorizados) o 4 (Intruso)"
+                        mensaje = f"Comando no reconocido: {comando}"
+                        color_mensaje = COLOR_ERROR
 
-                # --- ESTADO 3: REINICIAR ---
-                elif estado == "RESULTADO" and evento.key == pygame.K_RETURN:
-                    estado = "ESPERANDO_VOZ"
-                    color_actual = COLOR_FONDO_NORMAL
-                    texto_principal = "SISTEMA BLOQUEADO"
-                    texto_secundario = "Presione [ESPACIO] para activar el micrófono"
-
-        # --- DIBUJADO DE LA PANTALLA ---
-        pantalla.fill(color_actual)
-        superficie_prin = fuente_titulo.render(texto_principal, True, COLOR_TEXTO)
-        superficie_sec = fuente_texto.render(texto_secundario, True, COLOR_TEXTO)
-        
-        pantalla.blit(superficie_prin, (ANCHO//2 - superficie_prin.get_width()//2, ALTO//2 - 40))
-        pantalla.blit(superficie_sec, (ANCHO//2 - superficie_sec.get_width()//2, ALTO//2 + 30))
-        pygame.display.flip()
-
-        # --- LÓGICA DE AUDIO (Bloqueante) ---
-        # Se ejecuta DESPUÉS de dibujar la pantalla azul para que el usuario sepa que puede hablar
-        if estado == "ESCUCHANDO":
-            comando = agente.escuchar_comando()
-            
-            if comando in ["reconocer", "identificar"]:
-                estado = "ESPERANDO_HUELLA"
-                color_actual = COLOR_FONDO_NORMAL
-                texto_principal = f"COMANDO '{comando.upper()}' ACEPTADO"
-                texto_secundario = "Simule escáner: Presione 1, 2, 3 (Autorizado) o 4 (Intruso)"
-            elif comando == "salir":
-                print("Cerrando sistema por comando de voz...")
-                pygame.quit()
-                sys.exit()
-            else:
-                estado = "ESPERANDO_VOZ"
-                color_actual = COLOR_ERROR
-                texto_principal = "COMANDO NO RECONOCIDO"
-                texto_secundario = "Presione [ESPACIO] para intentar de nuevo"
-                
+        dibujar_interfaz(
+            pantalla,
+            fuentes,
+            ruta_muestra,
+            imagen_muestra,
+            mensaje,
+            color_mensaje,
+        )
         reloj.tick(30)
+
+    pygame.quit()
+    sys.exit()
+
 
 if __name__ == "__main__":
     main()
